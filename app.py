@@ -9,25 +9,40 @@ import random
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="GEO Score™ Pro Analyzer", layout="wide")
 
-# --- CSS CUSTOM PER INTERFACCIA PAZZESCA ---
+# --- NUOVO LOOK CHILL & PRO ---
 st.markdown("""
     <style>
-    .stApp { background-color: #050505; color: #ffffff; }
+    /* Sfondo chiaro e riposante */
+    .stApp { 
+        background-color: #fdfdfd; 
+        color: #333333; 
+    }
+    
+    /* Card bianche con ombra leggera */
     .main-card { 
-        background: rgba(255, 255, 255, 0.03); 
-        padding: 30px; 
-        border-radius: 20px; 
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
+        background-color: #ffffff; 
+        padding: 20px; 
+        border-radius: 15px; 
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        border: 1px solid #f0f0f0;
+        margin-bottom: 20px;
     }
-    .glitch-text { font-family: 'Syne', sans-serif; font-weight: 800; color: #0066ff; }
-    .agency-only { 
-        background: linear-gradient(90deg, #1e1e1e, #0a0a0a);
-        padding: 15px;
-        border-left: 5px solid #ff4b4b;
-        margin-top: 20px;
+    
+    /* Titolo Blu Professionale */
+    h1 { 
+        color: #1a73e8; 
+        font-weight: 700; 
+        letter-spacing: -1px;
     }
-    .blur-text { filter: blur(5px); pointer-events: none; user-select: none; }
+
+    /* Bottoni arrotondati */
+    .stButton>button {
+        border-radius: 25px;
+        background-color: #1a73e8;
+        color: white;
+        border: none;
+        padding: 0.5rem 2rem;
+    }
     </style>
     """, unsafe_allow_html=True)
 
