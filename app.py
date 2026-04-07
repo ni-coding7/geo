@@ -38,7 +38,7 @@ def invia_mail_agenzia(url, brand, keyword, analisi_pro):
     password = st.secrets["EMAIL_PASSWORD"] # La password app di Gmail
     
     msg = MIMEMultipart()
-    msg['From'] = ASSISTENTE GEO NICOEFFE
+    msg['From'] = "ASSISTENTE GEO NICOEFFE"
     msg['To'] = destinatario
     msg['Subject'] = f"🚀 NUOVO LEAD GEO: {brand} ({url})"
     
