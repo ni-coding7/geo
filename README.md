@@ -24,4 +24,4 @@ Se vuoi far girare il tool sul tuo computer:
 
 1. Clona il repository:
    ```bash
-   git clone [https://github.com/ni-coding7/geo-score-tool.git](https://github.com/ni-coding7/geo-score-tool.git)
+   git clone [https://github.com/ni-coding7/geo](https://github.com/ni-coding7/geo)
