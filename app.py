@@ -206,7 +206,18 @@ def get_secret(key):
         return None
 
 
-# ─── CLAUDE CON WEB SEARCH ─────────────────────────────────────────
+# ─── CLAUDE – ARCHITETTURA A DUE FASI (economica) ──────────────────
+#
+#  FASE 1 — Haiku  (modello economico) + 1 sola web search
+#           Raccoglie i dati grezzi del sito in formato JSON compatto.
+#           Costo tipico: ~$0.03-0.06 per audit
+#
+#  FASE 2 — Sonnet (modello intermedio, NO web search)
+#           Riceve il JSON di dati grezzi e genera diagnosi + JSON-LD + testo.
+#           Costo tipico: ~$0.05-0.10 per audit
+#
+#  Totale stimato: ~$0.08-0.16 per audit  (vs $1.5 con Opus + 5 search)
+# ────────────────────────────────────────────────────────────────────
 def genera_analisi(brand, url, keyword):
     api_key = get_secret("ANTHROPIC_API_KEY")
     if not api_key:
@@ -214,119 +225,115 @@ def genera_analisi(brand, url, keyword):
     try:
         client = anthropic.Anthropic(api_key=api_key)
 
-        # ── FASE 1: ricerca reale del sito ──────────────────────────
-        # Claude usa web_search per leggere il sito e raccogliere dati concreti
-        ricerca_prompt = f"""Sei un esperto di GEO (Generative Engine Optimization) e Schema.org.
+        # ── FASE 1: Haiku + 1 web search → dati grezzi ──────────────
+        prompt_ricerca = f"""Cerca informazioni su "{brand}" ({url}) per la keyword "{keyword}".
 
-Devi analizzare in modo APPROFONDITO il sito web del brand "{brand}" all'indirizzo {url}.
+Fai UNA SOLA ricerca web: "{brand} {url} contatti servizi social".
 
-USA lo strumento web_search per:
-1. Cercare "{brand} {url}" e leggere la homepage
-2. Cercare "{brand} contatti indirizzo P.IVA"
-3. Cercare "{brand} social media LinkedIn Facebook Instagram"
-4. Cercare "{brand} servizi prodotti"
-5. Cercare "{brand} recensioni"
+Poi rispondi SOLO con un oggetto JSON compatto (niente testo extra) con questi campi
+(usa null se non trovato, non inventare):
 
-Raccogli TUTTI i seguenti dati reali (se non trovi un dato, scrivi "NON TROVATO"):
-- Tipo di entità: (scegli UNO tra: LocalBusiness, ProfessionalService, MedicalBusiness, LegalService, FinancialService, FoodEstablishment, Store, Product, SoftwareApplication, Organization, EducationalOrganization, Hotel, TouristAttraction, Event)
-- Nome legale completo
-- URL canonico
-- Logo URL
-- Descrizione breve (max 160 caratteri)
-- Indirizzo completo (via, numero, CAP, città, provincia, paese)
-- Telefono (formato internazionale +39...)
-- Email di contatto
-- P.IVA / VAT ID
-- Anno di fondazione
-- Fondatore/i
-- Numero dipendenti (approssimativo)
-- Servizi/prodotti principali (lista)
-- Area geografica servita
-- Profilo LinkedIn URL
-- Profilo Facebook URL  
-- Profilo Instagram URL
-- Profilo Twitter/X URL
-- Google Business URL
-- Wikipedia URL (se esiste)
-- Wikidata URL (se esiste)
-- Eventuali certificazioni o premi
-- Rating medio (se presente su Google/Trustpilot)
-- Numero recensioni
+{{
+  "tipo_entita": "...",
+  "nome_legale": "...",
+  "url": "...",
+  "logo_url": null,
+  "descrizione": "...",
+  "indirizzo": {{"via":"...","cap":"...","citta":"...","provincia":"...","paese":"Italia"}},
+  "telefono": null,
+  "email": null,
+  "piva": null,
+  "anno_fondazione": null,
+  "fondatore": null,
+  "servizi": ["...","..."],
+  "area_servita": "...",
+  "social": {{
+    "linkedin": null,
+    "facebook": null,
+    "instagram": null,
+    "twitter": null,
+    "youtube": null
+  }},
+  "google_business": null,
+  "wikipedia": null,
+  "wikidata": null,
+  "certificazioni": [],
+  "rating": null,
+  "n_recensioni": null,
+  "lacune_geo": ["elenca 3-4 lacune GEO concrete che hai osservato"]
+}}
 
-Poi rispondi con ESATTAMENTE questi 3 blocchi:
+Rispondi SOLO con il JSON, nessun altro testo."""
 
-## DIAGNOSI
-Analisi professionale di 4-6 punti su perché le AI generative non citano questo sito.
-Basa l'analisi sui dati REALI trovati. Sii specifico: cita lacune concrete (mancanza di markup strutturato, assenza di Wikipedia/Wikidata, profili social non collegati, contenuto non ottimizzato per intent informativi, ecc.).
-NON menzionare codice o JSON in questa sezione.
-
-## JSON_LD
-Genera il JSON-LD Schema.org COMPLETO e PRECISO pronto da copiare e incollare nell'<head> della homepage.
-
-REGOLE FONDAMENTALI:
-- Usa SOLO dati reali trovati. Se un campo non è verificabile, OMETTILO completamente (non usare placeholder come "inserire qui").
-- Scegli il @type corretto in base al tipo di entità rilevato.
-- Includi SEMPRE questi campi se disponibili: @context, @type, @id, name, url, logo, image, description, foundingDate, founder, numberOfEmployees, address (PostalAddress completo), telephone, email, vatID, sameAs (array con TUTTI i profili social + Wikipedia + Wikidata + Google Business), knowsAbout (array di argomenti di competenza), hasOfferCatalog (con i servizi/prodotti reali), areaServed, contactPoint, award.
-
-- Per LocalBusiness/ProfessionalService aggiungi anche: openingHoursSpecification, geo (GeoCoordinates), priceRange, aggregateRating (se hai dati reali).
-- Per Product aggiungi: brand, offers (con Offer), sku, gtin.
-- Per SoftwareApplication aggiungi: applicationCategory, operatingSystem, offers.
-- Per Organization aggiungi: legalName, department (se applicabile).
-
-Il JSON deve essere VALIDO, ben formattato, con tutti i campi popolati con dati reali.
-Includi il tag <script type="application/ld+json"> e </script>.
-
-## TESTO_HOME
-Un paragrafo di 90-110 parole da inserire nella Home page, ottimizzato GEO.
-Il testo deve:
-- Includere il nome del brand, la città/area, i servizi principali
-- Usare entità semantiche esplicite (nomi propri, luoghi, specializzazioni)
-- Rispondere a domande implicite che un utente farebbe a un'AI ("Chi è X?", "Cosa fa X?", "Dove si trova X?")
-- Essere scritto in italiano naturale, non robotico
-- NON essere marketing generico: usa dettagli concreti trovati sul sito
-"""
-
-        # Chiamata con web_search abilitato
-        response = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=4000,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
-            messages=[{"role": "user", "content": ricerca_prompt}],
+        r1 = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1200,
+            tools=[{
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 1,          # una sola ricerca
+            }],
+            messages=[{"role": "user", "content": prompt_ricerca}],
         )
 
-        # Estrai solo i blocchi di testo dalla risposta (ignora tool_use blocks)
-        testo_finale = ""
-        for block in response.content:
-            if block.type == "text":
-                testo_finale += block.text
-
-        # Se la risposta si è fermata per tool_use, continua fino al testo finale
-        while response.stop_reason == "tool_use":
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": "Ricerca completata."
-                    })
-
-            messages_followup = [
-                {"role": "user", "content": ricerca_prompt},
-                {"role": "assistant", "content": response.content},
-                {"role": "user", "content": tool_results},
+        # Gestisci il loop tool_use per Haiku
+        messages_h = [{"role": "user", "content": prompt_ricerca}]
+        while r1.stop_reason == "tool_use":
+            messages_h.append({"role": "assistant", "content": r1.content})
+            tool_results = [
+                {"type": "tool_result", "tool_use_id": b.id, "content": "ok"}
+                for b in r1.content if b.type == "tool_use"
             ]
-            response = client.messages.create(
-                model="claude-opus-4-5",
-                max_tokens=4000,
-                tools=[{"type": "web_search_20250305", "name": "web_search"}],
-                messages=messages_followup,
+            messages_h.append({"role": "user", "content": tool_results})
+            r1 = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1200,
+                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 1}],
+                messages=messages_h,
             )
-            for block in response.content:
-                if block.type == "text":
-                    testo_finale += block.text
 
-        return testo_finale if testo_finale else "ERRORE: Nessun testo nella risposta."
+        dati_grezzi = "".join(b.text for b in r1.content if b.type == "text").strip()
+
+        # ── FASE 2: Sonnet (NO web search) → output finale ───────────
+        prompt_output = f"""Sei il Senior GEO Expert di Alligator.it.
+Hai a disposizione questi dati reali sul brand (estratti dal web):
+
+{dati_grezzi}
+
+Genera i 3 blocchi seguenti. Usa SOLO dati presenti nel JSON sopra.
+Se un campo è null, omettilo dal JSON-LD (non usare placeholder).
+
+## DIAGNOSI
+4-5 punti professionali su perché le AI generative non citano questo brand.
+Basa ogni punto su una lacuna concreta trovata nei dati (es. assenza di markup,
+nessuna presenza Wikipedia/Wikidata, social non collegati al sito, ecc.).
+NON citare codice o JSON. Tono consulenziale.
+
+## JSON_LD
+JSON-LD Schema.org COMPLETO, valido, pronto per copia-incolla nell'<head>.
+Scegli @type corretto dal tipo_entita rilevato.
+Includi SEMPRE (se presenti nei dati): @context, @type, @id, name, url, logo,
+description, foundingDate, founder, address (PostalAddress), telephone, email,
+vatID, sameAs (array: tutti i social NON null + wikipedia + wikidata + google_business),
+knowsAbout (da servizi+keyword), hasOfferCatalog (oggetti ServiceCatalog/ItemList
+con i servizi reali), areaServed, contactPoint.
+Per LocalBusiness aggiungi anche: geo (GeoCoordinates se indirizzo noto), priceRange.
+Per Organization aggiungi: legalName.
+Includi tag <script type="application/ld+json"> ... </script>.
+
+## TESTO_HOME
+Paragrafo di 90-110 parole per la Home, ottimizzato GEO.
+Deve contenere: nome brand, città/area, servizi principali, keyword "{keyword}".
+Scrivi come un esperto che descrive l'azienda a un'AI.
+Italiano naturale, dettagli concreti, niente marketing generico."""
+
+        r2 = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt_output}],
+        )
+
+        return "".join(b.text for b in r2.content if b.type == "text")
 
     except anthropic.AuthenticationError:
         return "ERRORE: API Key Anthropic non valida."
