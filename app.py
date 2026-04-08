@@ -91,4 +91,4 @@ def invia_mail_agenzia(url, brand, keyword, analisi_pro):
     msg.attach(MIMEText(corpo, 'plain'))
     
     try:
-        server = smtplib.SMTP('
+        server = smtplib.SMTP
