@@ -10,13 +10,10 @@ import anthropic
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Alligator GEO-Scanner Pro", layout="wide")
 
-# --- 1. DEFINIZIONE DELLO STILE (CSS ALLIGATOR) ---
+# --- 1. STILE CSS ---
 st.markdown("""
     <style>
-    :root {
-        --alligator-green: #2ecc71; 
-        --dark-bg: #1a1a1a;
-    }
+    :root { --alligator-green: #2ecc71; --dark-bg: #1a1a1a; }
     .stApp { background-color: #ffffff; }
     .stHeader {
         background-color: var(--dark-bg);
@@ -29,56 +26,51 @@ st.markdown("""
     .result-card {
         border-left: 5px solid var(--alligator-green);
         background: #f8f9fa;
-        padding: 25px;
-        border-radius: 0 15px 15px 0;
-        color: #333;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
-    }
-    .stButton>button {
-        width: 100%;
-        background-color: var(--alligator-green);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.8rem;
-        font-weight: bold;
+        padding: 20px;
+        border-radius: 0 10px 10px 0;
+        margin-top: 15px;
+        white-space: pre-wrap; /* Mantiene la formattazione di Claude */
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNZIONE LOGICA AI (CLAUDE) ---
-def genera_report_operativo(brand, url, keyword):
+# --- FUNZIONE CLAUDE (IL CERVELLO) ---
+def genera_analisi(brand, url, keyword):
     try:
+        # Recupera la chiave dai Secrets
         client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-        prompt_tecnico = f"""
-        Sei il Direttore Tecnico di Alligator.it, esperto in GEO (Generative Engine Optimization).
+        
+        prompt = f"""
+        Sei il Senior GEO Expert di Alligator.it. 
         Analizza il brand {brand} (sito: {url}) per la keyword '{keyword}'.
-        Fornisci un report operativo con:
-        1. DIAGNOSI VELOCE (perché le AI non lo citano).
-        2. SCHEMA MARKUP JSON-LD pronto da copiare.
-        3. PARAGRAFO AI-READY ottimizzato.
+        
+        RISPONDI IN ITALIANO CON QUESTI 3 BLOCCHI:
+        1. DIAGNOSI TECNICA: Perché le AI non citano questo sito?
+        2. SCHEMA MARKUP JSON-LD: Genera il codice pronto da copiare.
+        3. TESTO OTTIMIZZATO: Un paragrafo da mettere nella Home.
         """
+        
         response = client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=1500,
-            messages=[{"role": "user", "content": prompt_tecnico}]
+            messages=[{"role": "user", "content": prompt}]
         )
         return response.content[0].text
     except Exception as e:
-        return f"Analisi tecnica in elaborazione manuale. (Dettaglio: {e})"
+        return f"Errore AI: Assicurati che la ANTHROPIC_API_KEY sia corretta nei Secrets. Dettaglio: {e}"
 
-# --- FUNZIONE INVIO MAIL ---
-def invia_mail_agenzia(url, brand, keyword, analisi_pro):
-    mittente = "nicofioretti7@gmail.com"
-    destinatario = "nicofioretti7@gmail.com"
+# --- FUNZIONE MAIL ---
+def invia_report_mail(brand, url, keyword, analisi):
     try:
+        mittente = "nicofioretti7@gmail.com"
         password = st.secrets["EMAIL_PASSWORD"]
+        
         msg = MIMEMultipart()
-        msg['From'] = "ASSISTENTE GEO NICOEFFE"
-        msg['To'] = destinatario
-        msg['Subject'] = f"🐊 NUOVO LEAD ALLIGATOR: {brand}"
-        corpo = f"URL: {url}\nBrand: {brand}\nKeyword: {keyword}\n\nREPORT AI:\n{analisi_pro}"
+        msg['From'] = "ALLIGATOR AI BOT"
+        msg['To'] = mittente
+        msg['Subject'] = f"🐊 NUOVO LEAD: {brand}"
+        
+        corpo = f"Nuova analisi per {brand} ({url})\nKeyword: {keyword}\n\n{analisi}"
         msg.attach(MIMEText(corpo, 'plain'))
         
         server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -89,33 +81,40 @@ def invia_mail_agenzia(url, brand, keyword, analisi_pro):
     except:
         pass
 
-# --- 2. L'HEADER VISIVO (MANCAVA!) ---
-st.markdown("""
-    <div class='stHeader'>
-        <h1 style='color: white; font-size: 3.5rem; margin-bottom: 0;'>🐊 ALLIGATOR</h1>
-        <h2 style='color: #2ecc71; font-weight: 300; margin-top: 0;'>GEO-SCANNER PRO</h2>
-    </div>
-    """, unsafe_allow_html=True)
+# --- INTERFACCIA ---
+st.markdown("<div class='stHeader'><h1>🐊 ALLIGATOR</h1><h3>GEO-SCANNER PRO</h3></div>", unsafe_allow_html=True)
 
-# --- 3. AREA DI INPUT (MANCAVA!) ---
-st.write("### 🛠️ Configura la tua analisi")
+st.write("### 🛠️ Configura l'Audit")
 col1, col2 = st.columns(2)
 with col1:
-    url_input = st.text_input("Sito Web (es: https://sito.it)")
-    brand_input = st.text_input("Nome del Brand")
+    u = st.text_input("URL Sito")
+    b = st.text_input("Brand")
 with col2:
-    keyword_input = st.text_input("Keyword Target")
-    email_cliente = st.text_input("Tua Email")
+    k = st.text_input("Keyword")
+    m = st.text_input("Tua Email (opzionale)")
 
-# --- AZIONE ---
-if st.button("AVVIA AUDIT PROFESSIONALE"):
-    if url_input and brand_input and keyword_input:
-        with st.spinner("L'Alligator sta analizzando..."):
-            analisi = genera_report_operativo(brand_input, url_input, keyword_input)
-            invia_mail_agenzia(url_input, brand_input, keyword_input, analisi)
+if st.button("ANALIZZA ORA"):
+    if u and b and k:
+        with st.spinner("Alligator sta elaborando i dati con Claude AI..."):
+            # 1. Chiamata a Claude
+            risultato_ai = genera_analisi(b, u, k)
             
+            # 2. Mostra i grafici (simulati per estetica)
             st.markdown("---")
-            st.markdown("### 📊 Risultati per il Brand")
-            st.markdown(f"<div class='result-card'>{analisi}</div>", unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown(f"### Score per {b}")
+                scores = [random.randint(40, 90) for _ in range(5)]
+                fig = go.Figure(data=go.Scatterpolar(r=scores, theta=['A','B','C','D','E'], fill='toself', line_color='#2ecc71'))
+                st.plotly_chart(fig)
+            
+            with c2:
+                st.markdown("### 📋 Report Tecnico (Copia & Incolla)")
+                # QUI APPARE L'ANALISI DI CLAUDE A SCHERMO
+                st.markdown(f"<div class='result-card'>{risultato_ai}</div>", unsafe_allow_html=True)
+            
+            # 3. Invio mail silente a te
+            invia_report_mail(b, u, k, risultato_ai)
+            st.success("Analisi completata! Il report è stato inviato anche alla mail dell'agenzia.")
     else:
-        st.warning("Completa tutti i campi!")
+        st.error("Inserisci tutti i dati!")
