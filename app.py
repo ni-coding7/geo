@@ -206,34 +206,128 @@ def get_secret(key):
         return None
 
 
-# ─── CLAUDE ────────────────────────────────────────────────────────
+# ─── CLAUDE CON WEB SEARCH ─────────────────────────────────────────
 def genera_analisi(brand, url, keyword):
     api_key = get_secret("ANTHROPIC_API_KEY")
     if not api_key:
         return "ERRORE: ANTHROPIC_API_KEY non configurata nei Secrets."
     try:
         client = anthropic.Anthropic(api_key=api_key)
-        prompt = f"""Sei il Senior GEO Expert di Alligator.it.
-Analizza il brand **{brand}** (sito: {url}) per la keyword '{keyword}'.
 
-RISPONDI IN ITALIANO con questi 3 blocchi separati ESATTAMENTE con questi titoli:
+        # ── FASE 1: ricerca reale del sito ──────────────────────────
+        # Claude usa web_search per leggere il sito e raccogliere dati concreti
+        ricerca_prompt = f"""Sei un esperto di GEO (Generative Engine Optimization) e Schema.org.
+
+Devi analizzare in modo APPROFONDITO il sito web del brand "{brand}" all'indirizzo {url}.
+
+USA lo strumento web_search per:
+1. Cercare "{brand} {url}" e leggere la homepage
+2. Cercare "{brand} contatti indirizzo P.IVA"
+3. Cercare "{brand} social media LinkedIn Facebook Instagram"
+4. Cercare "{brand} servizi prodotti"
+5. Cercare "{brand} recensioni"
+
+Raccogli TUTTI i seguenti dati reali (se non trovi un dato, scrivi "NON TROVATO"):
+- Tipo di entità: (scegli UNO tra: LocalBusiness, ProfessionalService, MedicalBusiness, LegalService, FinancialService, FoodEstablishment, Store, Product, SoftwareApplication, Organization, EducationalOrganization, Hotel, TouristAttraction, Event)
+- Nome legale completo
+- URL canonico
+- Logo URL
+- Descrizione breve (max 160 caratteri)
+- Indirizzo completo (via, numero, CAP, città, provincia, paese)
+- Telefono (formato internazionale +39...)
+- Email di contatto
+- P.IVA / VAT ID
+- Anno di fondazione
+- Fondatore/i
+- Numero dipendenti (approssimativo)
+- Servizi/prodotti principali (lista)
+- Area geografica servita
+- Profilo LinkedIn URL
+- Profilo Facebook URL  
+- Profilo Instagram URL
+- Profilo Twitter/X URL
+- Google Business URL
+- Wikipedia URL (se esiste)
+- Wikidata URL (se esiste)
+- Eventuali certificazioni o premi
+- Rating medio (se presente su Google/Trustpilot)
+- Numero recensioni
+
+Poi rispondi con ESATTAMENTE questi 3 blocchi:
 
 ## DIAGNOSI
-3-5 punti chiari su perché le AI generative (ChatGPT, Gemini, Perplexity) non citano questo sito.
-Usa un tono consulenziale professionale. NON menzionare schemi markup o codice tecnico in questa sezione.
+Analisi professionale di 4-6 punti su perché le AI generative non citano questo sito.
+Basa l'analisi sui dati REALI trovati. Sii specifico: cita lacune concrete (mancanza di markup strutturato, assenza di Wikipedia/Wikidata, profili social non collegati, contenuto non ottimizzato per intent informativi, ecc.).
+NON menzionare codice o JSON in questa sezione.
 
 ## JSON_LD
-Genera il codice Schema.org JSON-LD completo pronto da incollare, incluso il tag <script type="application/ld+json">. Commenta ogni campo.
+Genera il JSON-LD Schema.org COMPLETO e PRECISO pronto da copiare e incollare nell'<head> della homepage.
+
+REGOLE FONDAMENTALI:
+- Usa SOLO dati reali trovati. Se un campo non è verificabile, OMETTILO completamente (non usare placeholder come "inserire qui").
+- Scegli il @type corretto in base al tipo di entità rilevato.
+- Includi SEMPRE questi campi se disponibili: @context, @type, @id, name, url, logo, image, description, foundingDate, founder, numberOfEmployees, address (PostalAddress completo), telephone, email, vatID, sameAs (array con TUTTI i profili social + Wikipedia + Wikidata + Google Business), knowsAbout (array di argomenti di competenza), hasOfferCatalog (con i servizi/prodotti reali), areaServed, contactPoint, award.
+
+- Per LocalBusiness/ProfessionalService aggiungi anche: openingHoursSpecification, geo (GeoCoordinates), priceRange, aggregateRating (se hai dati reali).
+- Per Product aggiungi: brand, offers (con Offer), sku, gtin.
+- Per SoftwareApplication aggiungi: applicationCategory, operatingSystem, offers.
+- Per Organization aggiungi: legalName, department (se applicabile).
+
+Il JSON deve essere VALIDO, ben formattato, con tutti i campi popolati con dati reali.
+Includi il tag <script type="application/ld+json"> e </script>.
 
 ## TESTO_HOME
-Un paragrafo di 80-100 parole ottimizzato GEO da inserire nella Home page.
+Un paragrafo di 90-110 parole da inserire nella Home page, ottimizzato GEO.
+Il testo deve:
+- Includere il nome del brand, la città/area, i servizi principali
+- Usare entità semantiche esplicite (nomi propri, luoghi, specializzazioni)
+- Rispondere a domande implicite che un utente farebbe a un'AI ("Chi è X?", "Cosa fa X?", "Dove si trova X?")
+- Essere scritto in italiano naturale, non robotico
+- NON essere marketing generico: usa dettagli concreti trovati sul sito
 """
+
+        # Chiamata con web_search abilitato
         response = client.messages.create(
             model="claude-opus-4-5",
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}],
+            max_tokens=4000,
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            messages=[{"role": "user", "content": ricerca_prompt}],
         )
-        return response.content[0].text
+
+        # Estrai solo i blocchi di testo dalla risposta (ignora tool_use blocks)
+        testo_finale = ""
+        for block in response.content:
+            if block.type == "text":
+                testo_finale += block.text
+
+        # Se la risposta si è fermata per tool_use, continua fino al testo finale
+        while response.stop_reason == "tool_use":
+            tool_results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "Ricerca completata."
+                    })
+
+            messages_followup = [
+                {"role": "user", "content": ricerca_prompt},
+                {"role": "assistant", "content": response.content},
+                {"role": "user", "content": tool_results},
+            ]
+            response = client.messages.create(
+                model="claude-opus-4-5",
+                max_tokens=4000,
+                tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                messages=messages_followup,
+            )
+            for block in response.content:
+                if block.type == "text":
+                    testo_finale += block.text
+
+        return testo_finale if testo_finale else "ERRORE: Nessun testo nella risposta."
+
     except anthropic.AuthenticationError:
         return "ERRORE: API Key Anthropic non valida."
     except anthropic.RateLimitError:
@@ -264,69 +358,146 @@ def split_sezioni(testo):
 # ─── CREA DOCX ─────────────────────────────────────────────────────
 def crea_docx(brand, url, keyword, diagnosi, jsonld, testo, scores, geo_score, geo_label):
     doc = DocxDocument()
-
-    # stile base
     doc.styles["Normal"].font.name = "Arial"
     doc.styles["Normal"].font.size = Pt(11)
 
-    def colored_heading(text, level, rgb):
-        p = doc.add_heading(text, level=level)
-        for run in p.runs:
-            run.font.color.rgb = RGBColor(*rgb)
+    GREEN = (0x1a, 0x7a, 0x3c)
+    DARK  = (0x15, 0x5f, 0x2f)
+    GRAY  = (0x55, 0x55, 0x55)
+
+    def h1(txt):
+        p = doc.add_heading(txt, level=1)
+        for r in p.runs: r.font.color.rgb = RGBColor(*GREEN)
         return p
 
-    # Intestazione
-    doc.add_paragraph()
-    title = doc.add_paragraph()
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = title.add_run("🐊  ALLIGATOR · GEO-Scanner Pro")
-    r.font.size = Pt(20); r.font.bold = True
-    r.font.color.rgb = RGBColor(0x1a, 0x7a, 0x3c)
+    def h2(txt):
+        p = doc.add_heading(txt, level=2)
+        for r in p.runs: r.font.color.rgb = RGBColor(*DARK)
+        return p
 
-    subtitle = doc.add_paragraph()
-    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run(f"Report Tecnico Riservato — {brand}").font.size = Pt(12)
+    def note(txt):
+        p = doc.add_paragraph(f"ℹ️  {txt}")
+        if p.runs:
+            p.runs[0].font.size = Pt(10)
+            p.runs[0].font.color.rgb = RGBColor(*GRAY)
+            p.runs[0].font.italic = True
+        return p
+
+    def body(txt):
+        p = doc.add_paragraph(txt)
+        if p.runs: p.runs[0].font.size = Pt(11)
+        return p
+
+    # ── COPERTINA ──
+    doc.add_paragraph()
+    t = doc.add_paragraph()
+    t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = t.add_run("🐊  ALLIGATOR · GEO-Scanner Pro")
+    r.font.size = Pt(22); r.font.bold = True
+    r.font.color.rgb = RGBColor(*GREEN)
+
+    s = doc.add_paragraph()
+    s.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    s.add_run(f"Report Tecnico Riservato — Uso Interno Agenzia").font.size = Pt(12)
 
     doc.add_paragraph()
-    doc.add_paragraph(f"Brand:    {brand}")
-    doc.add_paragraph(f"URL:      {url}")
-    doc.add_paragraph(f"Keyword:  {keyword}")
+    for label, val in [("Brand", brand), ("URL", url), ("Keyword target", keyword),
+                       ("GEO Score", f"{geo_score}/100  —  {geo_label}")]:
+        p = doc.add_paragraph()
+        run_label = p.add_run(f"{label}: ")
+        run_label.font.bold = True
+        p.add_run(val)
     doc.add_paragraph()
 
-    # Score
-    colored_heading("GEO Score Complessivo", 1, (0x1a, 0x7a, 0x3c))
-    sp = doc.add_paragraph(f"Score: {geo_score}/100  —  Stato: {geo_label}")
-    sp.runs[0].font.bold = True; sp.runs[0].font.size = Pt(12)
+    # ── SCORE BREAKDOWN ──
+    h1("GEO Score Breakdown")
+    note("Punteggi simulati per dimensione. Usali per prioritizzare le azioni.")
+    doc.add_paragraph()
     labels = ["Clarity", "Structure", "Entity", "Trust", "Tech"]
     for lbl, s in zip(labels, scores):
-        doc.add_paragraph(f"  • {lbl}: {s}/100")
+        bar = "█" * (s // 10) + "░" * (10 - s // 10)
+        p = doc.add_paragraph()
+        run_l = p.add_run(f"{lbl:<12}")
+        run_l.font.name = "Courier New"; run_l.font.size = Pt(10)
+        run_b = p.add_run(f" {bar}  {s}/100")
+        run_b.font.name = "Courier New"; run_b.font.size = Pt(10)
+        if s >= 70:   run_b.font.color.rgb = RGBColor(*GREEN)
+        elif s >= 50: run_b.font.color.rgb = RGBColor(0xe6, 0x51, 0x00)
+        else:         run_b.font.color.rgb = RGBColor(0xc6, 0x28, 0x28)
     doc.add_paragraph()
 
-    # Diagnosi
-    colored_heading("Diagnosi Tecnica", 1, (0x1a, 0x7a, 0x3c))
-    doc.add_paragraph(diagnosi or "Non disponibile.")
+    # ── DIAGNOSI ──
+    h1("Diagnosi GEO")
+    note("Mostrabile al cliente durante la presentazione del report.")
+    doc.add_paragraph()
+    body(diagnosi or "Non disponibile.")
     doc.add_paragraph()
 
-    # JSON-LD
-    colored_heading("Schema Markup JSON-LD", 1, (0x1a, 0x7a, 0x3c))
-    doc.add_paragraph("Inserire questo codice nell'<head> di ogni pagina rilevante:")
-    cp = doc.add_paragraph(jsonld or "Non disponibile.")
+    # ── JSON-LD ──
+    h1("Schema Markup JSON-LD — COPIA & INCOLLA READY")
+    note("Incollare nell'<head> di OGNI pagina (o almeno homepage). "
+         "Verificare su: https://validator.schema.org  e  https://search.google.com/test/rich-results")
+    doc.add_paragraph()
+
+    h2("Come implementarlo")
+    body("1. Apri il CMS (WordPress, Webflow, ecc.) o il file HTML della homepage.")
+    body("2. Incolla il codice qui sotto PRIMA del tag </head>.")
+    body("3. Salva e pubblica.")
+    body("4. Valida su schema.org validator (link sopra).")
+    body("5. Per WordPress: usa il plugin 'Insert Headers and Footers' o 'Rank Math'.")
+    doc.add_paragraph()
+
+    h2("Codice JSON-LD")
+    cp = doc.add_paragraph(jsonld or "JSON-LD non generato.")
     if cp.runs:
         cp.runs[0].font.name = "Courier New"
-        cp.runs[0].font.size = Pt(9)
+        cp.runs[0].font.size = Pt(8.5)
     doc.add_paragraph()
 
-    # Testo Home
-    colored_heading("Testo Ottimizzato per la Home Page", 1, (0x1a, 0x7a, 0x3c))
-    doc.add_paragraph(testo or "Non disponibile.")
+    # ── TESTO HOME ──
+    h1("Testo Ottimizzato per la Home Page — COPIA & INCOLLA READY")
+    note("Inserire in un paragrafo visibile nella Home, preferibilmente sopra la fold "
+         "o nella sezione 'Chi siamo'. NON usare come meta description.")
     doc.add_paragraph()
 
-    # Nota interna
-    colored_heading("Note Interne Agenzia", 2, (0x15, 0x5f, 0x2f))
-    doc.add_paragraph(
-        "Documento riservato ad uso interno Alligator. "
-        "Applicare le implementazioni tecniche prima di condividere risultati con il cliente."
-    )
+    h2("Come implementarlo")
+    body("1. Vai alla sezione di testo della Home nel CMS.")
+    body("2. Aggiungi un nuovo paragrafo (o sostituisci il testo introduttivo esistente).")
+    body("3. Incolla il testo qui sotto, formattato come paragrafo normale (non H1/H2).")
+    body("4. Assicurati che sia visibile al crawl (non in elementi nascosti o lazy-load pesante).")
+    doc.add_paragraph()
+
+    h2("Testo")
+    tp = doc.add_paragraph(testo or "Testo non generato.")
+    if tp.runs:
+        tp.runs[0].font.size = Pt(11)
+        tp.runs[0].font.italic = True
+    doc.add_paragraph()
+
+    # ── CHECKLIST ──
+    h1("Checklist Implementazione")
+    note("Spunta ogni voce dopo l'implementazione.")
+    doc.add_paragraph()
+    items = [
+        "[ ]  JSON-LD incollato nell'<head> della homepage",
+        "[ ]  JSON-LD incollato nelle pagine servizi principali",
+        "[ ]  Validato su validator.schema.org",
+        "[ ]  Validato su Google Rich Results Test",
+        "[ ]  Testo ottimizzato inserito nella Home",
+        "[ ]  Profili social aggiornati con URL del sito (per sameAs)",
+        "[ ]  Scheda Google Business aggiornata",
+        "[ ]  Wikipedia / Wikidata verificata (se applicabile)",
+        "[ ]  Sitemap aggiornata e reinviata a Google Search Console",
+        "[ ]  Re-crawl richiesto in Google Search Console",
+    ]
+    for item in items:
+        p = doc.add_paragraph(item)
+        if p.runs: p.runs[0].font.name = "Courier New"; p.runs[0].font.size = Pt(10)
+    doc.add_paragraph()
+
+    # ── FOOTER ──
+    h2("Note Interne")
+    body("Documento riservato — Alligator.it Srl · Google Premier Partner 2025")
 
     buf = io.BytesIO()
     doc.save(buf)
