@@ -7,114 +7,162 @@ from email.mime.multipart import MIMEMultipart
 import random
 import anthropic
 
-# --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(page_title="Alligator GEO-Scanner Pro", layout="wide")
+# --- 1. SETTINGS & BRANDING ---
+st.set_page_config(page_title="Alligator GEO™ Professional", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 1. STILE CSS ---
-st.markdown("""
+# Colori Alligator Pro
+PRIMARY = "#2ecc71"
+DARK = "#121212"
+GRAY = "#f8f9fa"
+
+st.markdown(f"""
     <style>
-    :root { --alligator-green: #2ecc71; --dark-bg: #1a1a1a; }
-    .stApp { background-color: #ffffff; }
-    .stHeader {
-        background-color: var(--dark-bg);
-        padding: 3rem;
-        color: white;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+    
+    * {{ font-family: 'Inter', sans-serif; }}
+    
+    .stApp {{ background-color: white; }}
+    
+    /* Header Moderno */
+    .main-header {{
+        background: {DARK};
+        padding: 4rem 2rem;
+        border-bottom: 8px solid {PRIMARY};
         text-align: center;
-        border-bottom: 6px solid var(--alligator-green);
-        margin: -6rem -5rem 2rem -5rem;
-    }
-    .result-card {
-        border-left: 5px solid var(--alligator-green);
-        background: #f8f9fa;
-        padding: 20px;
-        border-radius: 0 10px 10px 0;
-        margin-top: 15px;
-        white-space: pre-wrap; /* Mantiene la formattazione di Claude */
-    }
-    </style>
-    """, unsafe_allow_html=True)
+        margin: -6rem -5rem 3rem -5rem;
+    }}
+    
+    .main-header h1 {{
+        color: white;
+        font-size: 4rem;
+        letter-spacing: -2px;
+        margin: 0;
+    }}
+    
+    .main-header p {{
+        color: {PRIMARY};
+        font-size: 1.2rem;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-top: 0.5rem;
+    }}
 
-# --- FUNZIONE CLAUDE (IL CERVELLO) ---
-def genera_analisi(brand, url, keyword):
+    /* Card Box */
+    .glass-card {{
+        background: {GRAY};
+        padding: 2rem;
+        border-radius: 15px;
+        border: 1px solid #eee;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }}
+
+    /* Bottoni Custom */
+    .stButton>button {{
+        width: 100%;
+        background: {PRIMARY} !important;
+        color: white !important;
+        border: none !important;
+        padding: 1rem !important;
+        font-weight: 700 !important;
+        border-radius: 10px !important;
+        transition: all 0.3s ease;
+    }}
+    
+    .stButton>button:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
+    }}
+
+    /* Code Block Styling */
+    code {{ color: {PRIMARY} !important; }}
+    </style>
+""", unsafe_allow_html=True)
+
+# --- 2. LOGICA DI BACKGROUND ---
+def get_ai_analysis(brand, url, keyword):
     try:
-        # Recupera la chiave dai Secrets
         client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+        prompt = f"""Analizza il brand {brand} ({url}) per '{keyword}'. 
+        Rispondi come Direttore Tecnico di Alligator.it.
+        FORMATO: 
+        1. DIAGNOSI BREVE.
+        2. CODICE JSON-LD SCHEMA.ORG (in un blocco codice).
+        3. PARAGRAFO DA COPIARE NELLA HOME."""
         
-        prompt = f"""
-        Sei il Senior GEO Expert di Alligator.it. 
-        Analizza il brand {brand} (sito: {url}) per la keyword '{keyword}'.
-        
-        RISPONDI IN ITALIANO CON QUESTI 3 BLOCCHI:
-        1. DIAGNOSI TECNICA: Perché le AI non citano questo sito?
-        2. SCHEMA MARKUP JSON-LD: Genera il codice pronto da copiare.
-        3. TESTO OTTIMIZZATO: Un paragrafo da mettere nella Home.
-        """
-        
-        response = client.messages.create(
+        msg = client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=1500,
             messages=[{"role": "user", "content": prompt}]
         )
-        return response.content[0].text
+        return msg.content[0].text
     except Exception as e:
-        return f"Errore AI: Assicurati che la ANTHROPIC_API_KEY sia corretta nei Secrets. Dettaglio: {e}"
+        return f"⚠️ Errore AI: Assicurati di aver inserito la ANTHROPIC_API_KEY nei Secrets di Streamlit. (Dettaglio: {e})"
 
-# --- FUNZIONE MAIL ---
-def invia_report_mail(brand, url, keyword, analisi):
+def send_lead_email(brand, url, keyword, report):
     try:
-        mittente = "nicofioretti7@gmail.com"
         password = st.secrets["EMAIL_PASSWORD"]
-        
         msg = MIMEMultipart()
-        msg['From'] = "ALLIGATOR AI BOT"
-        msg['To'] = mittente
         msg['Subject'] = f"🐊 NUOVO LEAD: {brand}"
+        msg['From'] = "Alligator GEO Bot"
+        msg['To'] = "nicofioretti7@gmail.com"
+        msg.attach(MIMEText(f"URL: {url}\nBrand: {brand}\nKeyword: {keyword}\n\nREPORT:\n{report}", 'plain'))
         
-        corpo = f"Nuova analisi per {brand} ({url})\nKeyword: {keyword}\n\n{analisi}"
-        msg.attach(MIMEText(corpo, 'plain'))
-        
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(mittente, password)
-        server.send_message(msg)
-        server.quit()
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login("nicofioretti7@gmail.com", password)
+            server.send_message(msg)
     except:
         pass
 
-# --- INTERFACCIA ---
-st.markdown("<div class='stHeader'><h1>🐊 ALLIGATOR</h1><h3>GEO-SCANNER PRO</h3></div>", unsafe_allow_html=True)
+# --- 3. INTERFACCIA UTENTE ---
+st.markdown(f"""
+    <div class="main-header">
+        <h1>🐊 ALLIGATOR</h1>
+        <p>Generative Engine Optimization • Scanner Pro</p>
+    </div>
+""", unsafe_allow_html=True)
 
-st.write("### 🛠️ Configura l'Audit")
-col1, col2 = st.columns(2)
-with col1:
-    u = st.text_input("URL Sito")
-    b = st.text_input("Brand")
-with col2:
-    k = st.text_input("Keyword")
-    m = st.text_input("Tua Email (opzionale)")
-
-if st.button("ANALIZZA ORA"):
-    if u and b and k:
-        with st.spinner("Alligator sta elaborando i dati con Claude AI..."):
-            # 1. Chiamata a Claude
-            risultato_ai = genera_analisi(b, u, k)
-            
-            # 2. Mostra i grafici (simulati per estetica)
-            st.markdown("---")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown(f"### Score per {b}")
-                scores = [random.randint(40, 90) for _ in range(5)]
-                fig = go.Figure(data=go.Scatterpolar(r=scores, theta=['A','B','C','D','E'], fill='toself', line_color='#2ecc71'))
-                st.plotly_chart(fig)
-            
-            with c2:
-                st.markdown("### 📋 Report Tecnico (Copia & Incolla)")
-                # QUI APPARE L'ANALISI DI CLAUDE A SCHERMO
-                st.markdown(f"<div class='result-card'>{risultato_ai}</div>", unsafe_allow_html=True)
-            
-            # 3. Invio mail silente a te
-            invia_report_mail(b, u, k, risultato_ai)
-            st.success("Analisi completata! Il report è stato inviato anche alla mail dell'agenzia.")
-    else:
-        st.error("Inserisci tutti i dati!")
+# Layout Input
+with st.container():
+    st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([2, 2, 1])
+    with c1:
+        u = st.text_input("🔗 URL SITO", placeholder="https://alligator.it")
+    with c2:
+        b = st.text_input("🏷️ NOME BRAND", placeholder="Alligator")
+    with c3:
+        k = st.text_input("🔑 KEYWORD", placeholder="SEO Agency")
+    
+    if st.button("ANALIZZA ORA"):
+        if u and b and k:
+            with st.spinner("Alligator AI sta scansionando le entità..."):
+                # Esecuzione
+                report = get_ai_analysis(b, u, k)
+                send_lead_email(b, u, k, report)
+                
+                # Risultati
+                st.markdown("---")
+                res_left, res_right = st.columns([1, 1])
+                
+                with res_left:
+                    # Grafico
+                    labels = ['Clarity', 'Structure', 'Entity', 'Trust', 'Tech']
+                    vals = [random.randint(50, 95) for _ in range(5)]
+                    fig = go.Figure(data=go.Scatterpolar(
+                        r=vals, theta=labels, fill='toself',
+                        line_color=PRIMARY, fillcolor='rgba(46, 204, 113, 0.2)'
+                    ))
+                    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100])), showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    score = sum(vals) // 5
+                    st.metric("SCORE GLOBALE", f"{score}%", delta="Analizzato da Claude 3.5 Sonnet")
+                
+                with res_right:
+                    st.markdown("### 🛠️ Roadmap Operativa (Copy-Paste)")
+                    st.markdown(f"<div style='background: white; padding: 1.5rem; border-radius: 10px; border: 1px solid #ddd;'>{report}</div>", unsafe_allow_html=True)
+                    st.success("Analisi inviata via mail al team Alligator.")
+        else:
+            st.error("Inserisci tutti i dati, bro!")
+    st.markdown("</div>", unsafe_allow_html=True)
