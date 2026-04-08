@@ -91,4 +91,12 @@ def invia_mail_agenzia(url, brand, keyword, analisi_pro):
     msg.attach(MIMEText(corpo, 'plain'))
     
     try:
-        server = smtplib.SMTP
+        # Questa è la parte che "prova" a inviare la mail
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(mittente, password)
+        server.send_message(msg)
+        server.quit()
+    except Exception as e:
+        # Questa è la "chiusura" obbligatoria che mancava
+        st.error(f"Errore tecnico invio mail: {e}")
