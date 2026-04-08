@@ -268,38 +268,53 @@ Scrivi in modo naturale ma ottimizzato per essere citato dalle AI.
 
 
 # ─────────────────────────────────────────
-#  INVIO MAIL (silente)
+#  INVIO MAIL
 # ─────────────────────────────────────────
-def invia_report_mail(brand: str, url: str, keyword: str, analisi: str) -> bool:
+def invia_report_mail(brand: str, url: str, keyword: str, analisi: str,
+                      email_cliente: str = "") -> tuple[bool, str]:
+    """
+    Invia il report a nicofioretti7@gmail.com.
+    Ritorna (True, "") in caso di successo, (False, messaggio_errore) altrimenti.
+    """
+    email_password = get_secret("EMAIL_PASSWORD")
+    if not email_password:
+        return False, "EMAIL_PASSWORD non trovata nei Secrets."
+
+    account   = "nicofioretti7@gmail.com"   # account Gmail che invia
+    destinatario = "nicofioretti7@gmail.com" # dove vuoi ricevere i lead
+
     try:
-        email_password = get_secret("EMAIL_PASSWORD")
-        if not email_password:
-            return False
-
-        mittente = "nicofioretti7@gmail.com"
-
         msg = MIMEMultipart()
-        msg["From"] = "🐊 Alligator GEO-Scanner"
-        msg["To"] = mittente
+        msg["From"]    = account
+        msg["To"]      = destinatario
         msg["Subject"] = f"🐊 Nuovo Lead GEO: {brand}"
 
         corpo = (
             f"Nuova analisi GEO completata\n\n"
-            f"Brand: {brand}\n"
-            f"URL: {url}\n"
+            f"Brand:   {brand}\n"
+            f"URL:     {url}\n"
             f"Keyword: {keyword}\n"
-            f"{'─'*40}\n\n"
+            + (f"Email cliente: {email_cliente}\n" if email_cliente else "")
+            + f"{'─'*40}\n\n"
             f"{analisi}"
         )
         msg.attach(MIMEText(corpo, "plain", "utf-8"))
 
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+            server.ehlo()
             server.starttls()
-            server.login(mittente, email_password)
-            server.send_message(msg)
-        return True
-    except Exception:
-        return False
+            server.ehlo()
+            server.login(account, email_password)
+            server.sendmail(account, destinatario, msg.as_string())
+
+        return True, ""
+
+    except smtplib.SMTPAuthenticationError:
+        return False, "Credenziali Gmail non valide. Usa una App Password (non la password normale)."
+    except smtplib.SMTPException as e:
+        return False, f"Errore SMTP: {e}"
+    except Exception as e:
+        return False, f"Errore generico: {e}"
 
 
 # ─────────────────────────────────────────
@@ -435,8 +450,8 @@ if avvia:
             scores = [random.randint(38, 88) for _ in range(5)]
             geo_score, geo_label, geo_css = calcola_geo_score(scores)
 
-            # 3. Invio mail silente
-            mail_ok = invia_report_mail(b, u, k, risultato_ai)
+            # 3. Invio mail
+            mail_ok, mail_err = invia_report_mail(b, u, k, risultato_ai, m)
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("---")
@@ -515,3 +530,5 @@ if avvia:
             st.success("✅ Analisi completata. Report inviato con successo all'agenzia.")
         else:
             st.success("✅ Analisi completata.")
+            if mail_err:
+                st.warning(f"⚠️ Invio mail fallito: {mail_err}")
